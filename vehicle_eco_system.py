@@ -117,7 +117,7 @@ with tab1:
         p_rev = c3.number_input("预期单体收益 (¥)", 0.0, step=10.0)
         p_img_file = st.file_uploader("上传产品图片", type=['png', 'jpg', 'jpeg'])
         
-        if st.button("添加产品"):
+        if st.button("添加产品", key="btn_add_prod"):
             img_b64 = process_image_to_base64(p_img_file)
             run_query("INSERT INTO products (name, cost, revenue, image_base64) VALUES (?, ?, ?, ?)",
                       (p_name, p_cost, p_rev, img_b64))
@@ -147,7 +147,6 @@ with tab1:
         )
         
         st.divider()
-        # 【全新展开的醒目操作区】
         st.subheader("⚙️ 数据操作区 (编辑 / 删除)")
         col_edit, col_del = st.columns(2)
         
@@ -174,7 +173,8 @@ with tab1:
         with col_del:
             st.error("🗑️ **删除产品**")
             del_p_name = st.selectbox("1. 选择要删除的产品", df_p['产品名称'].tolist(), key="del_p_select")
-            if st.button("⚠️ 确认永久删除"):
+            # 【修复点】：修改了按钮文字，并增加了专属 key
+            if st.button("⚠️ 确认永久删除产品", key="btn_del_prod_confirm"):
                 del_id = int(df_p[df_p['产品名称'] == del_p_name]['id'].values  [0])
                 run_query("DELETE FROM products WHERE id=?", (del_id,))
                 run_query("DELETE FROM interface_product_link WHERE product_id=?", (del_id,))
@@ -206,7 +206,7 @@ with tab2:
         i_img_file = st.file_uploader("上传接口示意图", type=['png', 'jpg', 'jpeg'])
         selected_products = st.multiselect("可安装的生态产品 (多选)", list(product_options.keys()))
         
-        if st.button("添加接口"):
+        if st.button("添加接口", key="btn_add_intf"):
             img_b64 = process_image_to_base64(i_img_file)
             run_query("INSERT INTO interfaces (name, data_spec, cost, size_spec, image_base64) VALUES (?, ?, ?, ?, ?)",
                       (i_name, i_data, i_cost, i_size, img_b64))
@@ -238,7 +238,6 @@ with tab2:
         )
         
         st.divider()
-        # 【全新展开的醒目操作区】
         st.subheader("⚙️ 数据操作区 (编辑 / 删除)")
         col_edit_i, col_del_i = st.columns(2)
         
@@ -274,7 +273,8 @@ with tab2:
         with col_del_i:
             st.error("🗑️ **删除接口**")
             del_i_name = st.selectbox("1. 选择要删除的接口", df_i['接口名称'].tolist(), key="del_i_select")
-            if st.button("⚠️ 确认永久删除"):
+            # 【修复点】：修改了按钮文字，并增加了专属 key
+            if st.button("⚠️ 确认永久删除接口", key="btn_del_intf_confirm"):
                 del_id = int(df_i[df_i['接口名称'] == del_i_name]['id'].values  [0])
                 run_query("DELETE FROM interfaces WHERE id=?", (del_id,))
                 run_query("DELETE FROM interface_product_link WHERE interface_id=?", (del_id,))
@@ -300,7 +300,7 @@ with tab3:
     with c_left:
         st.info("🛠️ 新增操作区")
         new_model = st.text_input("新建车型名称", placeholder="例如：Model Y 2026款")
-        if st.button("创建车型"):
+        if st.button("创建车型", key="btn_create_car"):
             try:
                 run_query("INSERT INTO vehicles (model_name) VALUES (?)", (new_model,))
                 st.success("创建成功")
@@ -320,7 +320,7 @@ with tab3:
             count = st.number_input("数量", min_value=1, value=1)
             location = st.text_input("布置位置", "中控台")
             
-            if st.button("保存配置"):
+            if st.button("保存配置", key="btn_save_config"):
                 run_query("INSERT INTO vehicle_configs (vehicle_id, interface_id, count, location) VALUES (?, ?, ?, ?)",
                           (v_id, i_id, int(count), str(location)))
                 st.success("配置已保存！")
@@ -356,7 +356,7 @@ with tab3:
         
         if del_type == "删除整个车型" and not vehicles.empty:
             del_v_name = st.selectbox("选择要删除的车型", vehicles['model_name'].tolist())
-            if st.button("⚠️ 确认删除车型"):
+            if st.button("⚠️ 确认删除车型", key="btn_del_car"):
                 del_v_id = int(vehicles[vehicles['model_name'] == del_v_name]['id'].values  [0])
                 run_query("DELETE FROM vehicles WHERE id=?", (del_v_id,))
                 run_query("DELETE FROM vehicle_configs WHERE vehicle_id=?", (del_v_id,))
@@ -365,7 +365,7 @@ with tab3:
                 
         elif del_type == "删除单条配置" and not df_conf_list.empty:
             del_conf_name = st.selectbox("选择要删除的配置", df_conf_list['display_name'].tolist())
-            if st.button("⚠️ 确认删除配置"):
+            if st.button("⚠️ 确认删除配置", key="btn_del_config"):
                 del_c_id = int(df_conf_list[df_conf_list['display_name'] == del_conf_name]['id'].values  [0])
                 run_query("DELETE FROM vehicle_configs WHERE id=?", (del_c_id,))
                 st.success("配置已删除！")
