@@ -36,7 +36,7 @@ if not check_password():
 # ==========================================
 # 1. 基础配置与工具函数
 # ==========================================
-st.set_page_config(page_title="车载生态标准库 Pro", layout="wide", page_icon="🚗")
+st.set_page_config(page_title="小鹏车载生态标准库", layout="wide", page_icon="🚗")
 DB_FILE = "vehicle_eco_std.db"
 
 def process_image_to_base64(uploaded_file):
@@ -104,7 +104,7 @@ init_db()
 # ==========================================
 # 2. 全新架构：左侧边栏导航
 # ==========================================
-st.sidebar.title("🚗 车载生态标准库")
+st.sidebar.title("🚗 小鹏车载生态标准库")
 st.sidebar.divider()
 menu = st.sidebar.radio(
     "导航菜单",
