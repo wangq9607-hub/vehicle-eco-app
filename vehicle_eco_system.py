@@ -13,7 +13,7 @@ def check_password():
         try:
             correct_password = st.secrets["app_password"]
         except Exception:
-            correct_password = "123"  # 本地测试默认密码
+            correct_password = "123"
 
         if st.session_state["password"] == correct_password:
             st.session_state["password_correct"] = True
@@ -66,6 +66,8 @@ def display_base64_image(base64_str):
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
+    
+    # 创建表 (包含新字段 volume 和 take_rate)
     c.execute('''CREATE TABLE IF NOT EXISTS products (
                     id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
                     cost REAL, revenue REAL, image_base64 TEXT)''')
@@ -77,12 +79,24 @@ def init_db():
                     FOREIGN KEY(interface_id) REFERENCES interfaces(id),
                     FOREIGN KEY(product_id) REFERENCES products(id))''')
     c.execute('''CREATE TABLE IF NOT EXISTS vehicles (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT, model_name TEXT NOT NULL UNIQUE)''')
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, model_name TEXT NOT NULL UNIQUE,
+                    volume INTEGER DEFAULT 10000)''')
     c.execute('''CREATE TABLE IF NOT EXISTS vehicle_configs (
                     id INTEGER PRIMARY KEY AUTOINCREMENT, vehicle_id INTEGER,
-                    interface_id INTEGER, count INTEGER, location TEXT,
+                    interface_id INTEGER, count INTEGER, location TEXT, take_rate REAL DEFAULT 0.1,
                     FOREIGN KEY(vehicle_id) REFERENCES vehicles(id),
                     FOREIGN KEY(interface_id) REFERENCES interfaces(id))''')
+    
+    # 【无损升级脚本】：尝试为旧数据库添加新字段，如果已存在则忽略报错
+    try:
+        c.execute("ALTER TABLE vehicles ADD COLUMN volume INTEGER DEFAULT 10000")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        c.execute("ALTER TABLE vehicle_configs ADD COLUMN take_rate REAL DEFAULT 0.1")
+    except sqlite3.OperationalError:
+        pass
+        
     conn.commit()
     conn.close()
 
@@ -104,14 +118,12 @@ init_db()
 # ==========================================
 # 2. 全局弹窗通知系统 (Toast)
 # ==========================================
-# 检查缓存中是否有需要显示的成功信息
 if 'success_msg' in st.session_state:
     st.toast(st.session_state['success_msg'], icon="✅")
-    # 显示完后立刻删除，防止刷新页面时重复弹出
     del st.session_state['success_msg']
 
 # ==========================================
-# 3. 全新架构：左侧边栏导航
+# 3. 左侧边栏导航
 # ==========================================
 st.sidebar.title("🚗 车载生态标准库")
 st.sidebar.divider()
@@ -129,7 +141,6 @@ menu = st.sidebar.radio(
 # ------------------------------------------
 if menu == "📦 生态产品库":
     st.title("📦 生态产品库")
-    
     view_mode = st.radio("选择视图模式", ["📋 数据总表", "🖼️ 视觉图库", "⚙️ 数据管理 (增删改)"], horizontal=True)
     st.divider()
     
@@ -145,13 +156,10 @@ if menu == "📦 生态产品库":
 
     if view_mode == "📋 数据总表":
         if not df_p.empty:
-            st.dataframe(
-                df_p.drop(columns=['id', 'image_base64']), 
-                use_container_width=True,
-                column_config={"成本": st.column_config.NumberColumn(format="¥ %.2f"),
-                               "收益": st.column_config.NumberColumn(format="¥ %.2f"),
-                               "利润": st.column_config.NumberColumn(format="¥ %.2f")}
-            )
+            st.dataframe(df_p.drop(columns=['id', 'image_base64']), use_container_width=True,
+                         column_config={"成本": st.column_config.NumberColumn(format="¥ %.2f"),
+                                        "收益": st.column_config.NumberColumn(format="¥ %.2f"),
+                                        "利润": st.column_config.NumberColumn(format="¥ %.2f")})
         else:
             st.info("暂无数据，请前往【数据管理】添加。")
 
@@ -169,7 +177,6 @@ if menu == "📦 生态产品库":
 
     elif view_mode == "⚙️ 数据管理 (增删改)":
         col_add, col_edit = st.columns([1, 1])
-        
         with col_add:
             st.subheader("➕ 新增产品")
             with st.container(border=True):
@@ -181,7 +188,6 @@ if menu == "📦 生态产品库":
                     img_b64 = process_image_to_base64(p_img_file)
                     run_query("INSERT INTO products (name, cost, revenue, image_base64) VALUES (?, ?, ?, ?)",
                               (p_name, p_cost, p_rev, img_b64))
-                    # 【更新】：使用 session_state 传递成功信息给弹窗
                     st.session_state['success_msg'] = f"成功新增产品：{p_name}"
                     st.rerun()
 
@@ -191,7 +197,6 @@ if menu == "📦 生态产品库":
                 with st.container(border=True):
                     action_type = st.radio("操作类型", ["修改信息", "永久删除"], horizontal=True)
                     target_name = st.selectbox("选择目标产品", df_p['产品名称'].tolist())
-                    
                     if action_type == "修改信息":
                         target_p = df_p[df_p['产品名称'] == target_name].iloc  [0]
                         p_id = int(target_p['id'])
@@ -222,7 +227,6 @@ if menu == "📦 生态产品库":
 # ------------------------------------------
 elif menu == "🔌 接口标准库":
     st.title("🔌 接口标准库")
-    
     view_mode = st.radio("选择视图模式", ["📋 数据总表", "🖼️ 视觉图库", "⚙️ 数据管理 (增删改)"], horizontal=True)
     st.divider()
     
@@ -240,11 +244,8 @@ elif menu == "🔌 接口标准库":
 
     if view_mode == "📋 数据总表":
         if not df_i.empty:
-            st.dataframe(
-                df_i.drop(columns=['id', 'image_base64']), 
-                use_container_width=True,
-                column_config={"成本": st.column_config.NumberColumn(format="¥ %.2f")}
-            )
+            st.dataframe(df_i.drop(columns=['id', 'image_base64']), use_container_width=True,
+                         column_config={"成本": st.column_config.NumberColumn(format="¥ %.2f")})
         else:
             st.info("暂无数据。")
 
@@ -262,7 +263,6 @@ elif menu == "🔌 接口标准库":
 
     elif view_mode == "⚙️ 数据管理 (增删改)":
         col_add, col_edit = st.columns([1, 1])
-        
         with col_add:
             st.subheader("➕ 新增接口")
             with st.container(border=True):
@@ -272,7 +272,6 @@ elif menu == "🔌 接口标准库":
                 i_size = st.text_input("尺寸规格", "20mm x 10mm")
                 selected_products = st.multiselect("可安装的生态产品", list(product_options.keys()))
                 i_img_file = st.file_uploader("上传接口示意图", type=['png', 'jpg', 'jpeg'])
-                
                 if st.button("添加接口", type="primary"):
                     img_b64 = process_image_to_base64(i_img_file)
                     run_query("INSERT INTO interfaces (name, data_spec, cost, size_spec, image_base64) VALUES (?, ?, ?, ?, ?)",
@@ -290,13 +289,11 @@ elif menu == "🔌 接口标准库":
                 with st.container(border=True):
                     action_type = st.radio("操作类型", ["修改信息", "永久删除"], horizontal=True, key="i_action")
                     target_name = st.selectbox("选择目标接口", df_i['接口名称'].tolist())
-                    
                     if action_type == "修改信息":
                         target_i = df_i[df_i['接口名称'] == target_name].iloc  [0]
                         i_id = int(target_i['id'])
                         curr_links = get_df(f"SELECT p.name FROM interface_product_link l JOIN products p ON l.product_id = p.id WHERE l.interface_id = {i_id}")
                         curr_linked_names = curr_links['name'].tolist() if not curr_links.empty else []
-                        
                         with st.form(f"edit_i_form_{i_id}"):
                             new_i_name = st.text_input("接口名称", target_i['接口名称'])
                             new_i_cost = st.number_input("接口硬件成本 (¥)", value=float(target_i['成本']), step=5.0)
@@ -304,7 +301,6 @@ elif menu == "🔌 接口标准库":
                             new_i_size = st.text_input("尺寸规格", target_i['尺寸'])
                             new_selected_products = st.multiselect("可安装的生态产品", list(product_options.keys()), default=curr_linked_names)
                             new_i_img = st.file_uploader("更新图片 (不上传则保留原图)", type=['png', 'jpg', 'jpeg'])
-                            
                             if st.form_submit_button("💾 保存修改"):
                                 final_img = process_image_to_base64(new_i_img) if new_i_img else target_i['image_base64']
                                 run_query("UPDATE interfaces SET name=?, data_spec=?, cost=?, size_spec=?, image_base64=? WHERE id=?",
@@ -328,17 +324,17 @@ elif menu == "🔌 接口标准库":
                 st.info("暂无接口可供编辑。")
 
 # ------------------------------------------
-# 模块 3: 车型配置管理
+# 模块 3: 车型配置管理 (新增量纲与转化率)
 # ------------------------------------------
 elif menu == "🚙 车型配置管理":
     st.title("🚙 车型配置管理")
-    
     view_mode = st.radio("选择视图模式", ["📋 配置总表", "⚙️ 配置管理 (增删改)"], horizontal=True)
     st.divider()
     
     if view_mode == "📋 配置总表":
         q_config_full = """
-        SELECT v.model_name as 车型, i.name as 接口类型, vc.location as 布置位置, vc.count as 数量,
+        SELECT v.model_name as 车型, v.volume as 预期年销量, i.name as 接口类型, vc.location as 布置位置, 
+               vc.count as 数量, (vc.take_rate * 100) || '%' as 生态转化率,
                GROUP_CONCAT(DISTINCT p.name) as 兼容生态产品
         FROM vehicle_configs vc
         JOIN vehicles v ON vc.vehicle_id = v.id
@@ -361,17 +357,19 @@ elif menu == "🚙 车型配置管理":
             st.subheader("➕ 新增车型与配置")
             with st.container(border=True):
                 st.markdown("**1. 创建新车型**")
-                new_model = st.text_input("新建车型名称", placeholder="例如：Model Y 2026款")
+                col_m1, col_m2 = st.columns(2)
+                new_model = col_m1.text_input("新建车型名称", placeholder="例如：Model Y")
+                new_volume = col_m2.number_input("预期年销量 (辆)", min_value=1, value=100000, step=10000)
                 if st.button("创建车型"):
                     try:
-                        run_query("INSERT INTO vehicles (model_name) VALUES (?)", (new_model,))
+                        run_query("INSERT INTO vehicles (model_name, volume) VALUES (?, ?)", (new_model, new_volume))
                         st.session_state['success_msg'] = f"车型 {new_model} 创建成功！"
                         st.rerun()
                     except:
                         st.error("车型已存在")
                 
                 st.divider()
-                st.markdown("**2. 为车型添加接口**")
+                st.markdown("**2. 为车型添加接口配置**")
                 vehicles = get_df("SELECT * FROM vehicles")
                 interfaces = get_df("SELECT * FROM interfaces")
                 
@@ -380,13 +378,16 @@ elif menu == "🚙 车型配置管理":
                     v_id = int(vehicles[vehicles['model_name'] == sel_vehicle]['id'].values  [0])
                     sel_interface = st.selectbox("选择接口", interfaces['name'])
                     i_id = int(interfaces[interfaces['name'] == sel_interface]['id'].values  [0])
-                    count = st.number_input("数量", min_value=1, value=1)
-                    location = st.text_input("布置位置", "中控台")
+                    
+                    col_c1, col_c2, col_c3 = st.columns(3)
+                    location = col_c1.text_input("布置位置", "中控台")
+                    count = col_c2.number_input("接口数量", min_value=1, value=1)
+                    take_rate_pct = col_c3.number_input("生态转化率(%)", min_value=0.0, max_value=100.0, value=15.0, step=5.0)
                     
                     if st.button("保存配置", type="primary"):
-                        run_query("INSERT INTO vehicle_configs (vehicle_id, interface_id, count, location) VALUES (?, ?, ?, ?)",
-                                  (v_id, i_id, int(count), str(location)))
-                        st.session_state['success_msg'] = f"已成功为 {sel_vehicle} 添加 {sel_interface}！"
+                        run_query("INSERT INTO vehicle_configs (vehicle_id, interface_id, count, location, take_rate) VALUES (?, ?, ?, ?, ?)",
+                                  (v_id, i_id, int(count), str(location), take_rate_pct / 100.0))
+                        st.session_state['success_msg'] = f"已成功为 {sel_vehicle} 添加配置！"
                         st.rerun()
                 else:
                     st.warning("请先在左侧菜单添加产品和接口。")
@@ -394,9 +395,22 @@ elif menu == "🚙 车型配置管理":
         with c_right:
             st.subheader("✏️ 编辑 / 🗑️ 删除")
             with st.container(border=True):
-                action_type = st.radio("操作类型", ["修改单条配置", "删除单条配置", "删除整个车型"], horizontal=True, key="c_action")
+                action_type = st.radio("操作类型", ["修改车型基础信息", "修改单条配置", "删除单条配置", "删除整个车型"], horizontal=True, key="c_action")
                 
-                if action_type in ["修改单条配置", "删除单条配置"]:
+                if action_type == "修改车型基础信息":
+                    vehicles = get_df("SELECT * FROM vehicles")
+                    if not vehicles.empty:
+                        edit_v_name = st.selectbox("选择要修改的车型", vehicles['model_name'].tolist())
+                        target_v = vehicles[vehicles['model_name'] == edit_v_name].iloc  [0]
+                        with st.form("edit_v_form"):
+                            new_v_name = st.text_input("车型名称", target_v['model_name'])
+                            new_v_vol = st.number_input("预期年销量 (辆)", min_value=1, value=int(target_v['volume']), step=10000)
+                            if st.form_submit_button("💾 保存车型修改"):
+                                run_query("UPDATE vehicles SET model_name=?, volume=? WHERE id=?", (new_v_name, new_v_vol, int(target_v['id'])))
+                                st.session_state['success_msg'] = "车型信息修改成功！"
+                                st.rerun()
+
+                elif action_type in ["修改单条配置", "删除单条配置"]:
                     q_conf_list = """
                     SELECT vc.id, v.model_name || ' - ' || i.name || ' (' || vc.location || ')' as display_name
                     FROM vehicle_configs vc
@@ -404,18 +418,20 @@ elif menu == "🚙 车型配置管理":
                     JOIN interfaces i ON vc.interface_id = i.id
                     """
                     df_conf_list = get_df(q_conf_list)
-                    
                     if not df_conf_list.empty:
                         target_conf = st.selectbox("选择目标配置", df_conf_list['display_name'].tolist())
                         target_c_id = int(df_conf_list[df_conf_list['display_name'] == target_conf]['id'].values  [0])
                         
                         if action_type == "修改单条配置":
-                            target_c_data = get_df(f"SELECT count, location FROM vehicle_configs WHERE id={target_c_id}").iloc  [0]
+                            target_c_data = get_df(f"SELECT count, location, take_rate FROM vehicle_configs WHERE id={target_c_id}").iloc  [0]
                             with st.form(f"edit_c_form_{target_c_id}"):
-                                new_count = st.number_input("修改数量", min_value=1, value=int(target_c_data['count']))
                                 new_loc = st.text_input("修改布置位置", target_c_data['location'])
+                                col_e1, col_e2 = st.columns(2)
+                                new_count = col_e1.number_input("修改数量", min_value=1, value=int(target_c_data['count']))
+                                new_tr = col_e2.number_input("修改转化率(%)", min_value=0.0, max_value=100.0, value=float(target_c_data['take_rate']*100))
                                 if st.form_submit_button("💾 保存配置修改"):
-                                    run_query("UPDATE vehicle_configs SET count=?, location=? WHERE id=?", (new_count, new_loc, target_c_id))
+                                    run_query("UPDATE vehicle_configs SET count=?, location=?, take_rate=? WHERE id=?", 
+                                              (new_count, new_loc, new_tr/100.0, target_c_id))
                                     st.session_state['success_msg'] = "配置修改成功！"
                                     st.rerun()
                         else:
@@ -440,24 +456,36 @@ elif menu == "🚙 车型配置管理":
                             st.rerun()
 
 # ------------------------------------------
-# 模块 4: 成本收益分析
+# 模块 4: 成本收益分析 (引入量纲与转化率算法)
 # ------------------------------------------
 elif menu == "📊 成本收益分析":
     st.title("📊 成本收益分析")
+    st.caption("算法说明：总成本 = 接口单价 × 数量 × 车型销量 (假设100%预装) | 总收益 = 生态单体利润 × 数量 × 车型销量 × 转化率")
     st.divider()
     
     vehicles = get_df("SELECT * FROM vehicles")
     if not vehicles.empty:
         target_car = st.selectbox("选择分析车型", vehicles['model_name'], key="analysis_car")
-        v_id_tgt = int(vehicles[vehicles['model_name'] == target_car]['id'].values  [0])
+        v_data = vehicles[vehicles['model_name'] == target_car].iloc  [0]
+        v_id_tgt = int(v_data['id'])
+        v_volume = int(v_data['volume'])
         
-        df_cost = get_df(f"SELECT SUM(i.cost * c.count) as total_hw_cost FROM vehicle_configs c JOIN interfaces i ON c.interface_id = i.id WHERE c.vehicle_id = {v_id_tgt}")
+        # 成本计算：接口成本 * 数量 * 车型总销量
+        cost_query = f"""
+        SELECT SUM(i.cost * c.count * {v_volume}) as total_hw_cost
+        FROM vehicle_configs c
+        JOIN interfaces i ON c.interface_id = i.id
+        WHERE c.vehicle_id = {v_id_tgt}
+        """
+        df_cost = get_df(cost_query)
         total_hw_cost = df_cost['total_hw_cost'].values  [0] or 0
         
+        # 收益计算：最大利润 * 数量 * 车型总销量 * 转化率
         rev_query = f"""
         SELECT c.location as 布置位置, i.name as 接口名称, c.count as 数量,
+               (c.take_rate * 100) || '%' as 预计转化率,
                MAX(p.revenue - p.cost) as 最大单体利润, p.name as 最佳推荐产品,
-               (MAX(p.revenue - p.cost) * c.count) as 潜在总利润
+               (MAX(p.revenue - p.cost) * c.count * {v_volume} * c.take_rate) as 潜在总利润
         FROM vehicle_configs c
         JOIN interfaces i ON c.interface_id = i.id
         LEFT JOIN interface_product_link l ON i.id = l.interface_id
@@ -467,14 +495,17 @@ elif menu == "📊 成本收益分析":
         df_rev = get_df(rev_query)
         total_potential_profit = df_rev['潜在总利润'].sum() if not df_rev.empty else 0
         
-        col1, col2, col3 = st.columns(3)
+        # 顶部看板
+        col1, col2, col3, col4 = st.columns(4)
         col1.metric("🚗 分析车型", target_car)
-        col2.metric("💸 接口硬件投入 (成本)", f"¥ {total_hw_cost:,.2f}")
-        col3.metric("💰 潜在生态利润 (收益)", f"¥ {total_potential_profit:,.2f}", 
+        col2.metric("📈 预期年销量", f"{v_volume:,} 辆")
+        col3.metric("💸 硬件总投入 (BOM成本)", f"¥ {total_hw_cost:,.0f}")
+        col4.metric("💰 生态总收益 (毛利)", f"¥ {total_potential_profit:,.0f}", 
                     delta=f"ROI: {((total_potential_profit/total_hw_cost)*100 if total_hw_cost>0 else 0):.1f}%")
         
         st.divider()
         st.subheader("收益潜力明细")
-        st.dataframe(df_rev, use_container_width=True, hide_index=True)
+        st.dataframe(df_rev, use_container_width=True, hide_index=True,
+                     column_config={"潜在总利润": st.column_config.NumberColumn(format="¥ %d")})
     else:
         st.warning("请先在【车型配置管理】中添加车型数据")
