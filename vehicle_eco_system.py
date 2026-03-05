@@ -36,7 +36,7 @@ if not check_password():
 # ==========================================
 # 1. 基础配置与工具函数
 # ==========================================
-st.set_page_config(page_title="小鹏车载生态标准库", layout="wide", page_icon="🚗")
+st.set_page_config(page_title="车载生态标准库 Pro", layout="wide", page_icon="🚗")
 DB_FILE = "vehicle_eco_std.db"
 
 def process_image_to_base64(uploaded_file):
@@ -102,9 +102,18 @@ def get_df(query):
 init_db()
 
 # ==========================================
-# 2. 全新架构：左侧边栏导航
+# 2. 全局弹窗通知系统 (Toast)
 # ==========================================
-st.sidebar.title("🚗 小鹏车载生态标准库")
+# 检查缓存中是否有需要显示的成功信息
+if 'success_msg' in st.session_state:
+    st.toast(st.session_state['success_msg'], icon="✅")
+    # 显示完后立刻删除，防止刷新页面时重复弹出
+    del st.session_state['success_msg']
+
+# ==========================================
+# 3. 全新架构：左侧边栏导航
+# ==========================================
+st.sidebar.title("🚗 车载生态标准库")
 st.sidebar.divider()
 menu = st.sidebar.radio(
     "导航菜单",
@@ -112,7 +121,7 @@ menu = st.sidebar.radio(
 )
 
 # ==========================================
-# 3. 页面内容渲染
+# 4. 页面内容渲染
 # ==========================================
 
 # ------------------------------------------
@@ -121,7 +130,6 @@ menu = st.sidebar.radio(
 if menu == "📦 生态产品库":
     st.title("📦 生态产品库")
     
-    # 二级导航：视图切换
     view_mode = st.radio("选择视图模式", ["📋 数据总表", "🖼️ 视觉图库", "⚙️ 数据管理 (增删改)"], horizontal=True)
     st.divider()
     
@@ -173,7 +181,8 @@ if menu == "📦 生态产品库":
                     img_b64 = process_image_to_base64(p_img_file)
                     run_query("INSERT INTO products (name, cost, revenue, image_base64) VALUES (?, ?, ?, ?)",
                               (p_name, p_cost, p_rev, img_b64))
-                    st.success(f"已添加: {p_name}")
+                    # 【更新】：使用 session_state 传递成功信息给弹窗
+                    st.session_state['success_msg'] = f"成功新增产品：{p_name}"
                     st.rerun()
 
         with col_edit:
@@ -195,7 +204,7 @@ if menu == "📦 生态产品库":
                                 final_img = process_image_to_base64(new_p_img) if new_p_img else target_p['image_base64']
                                 run_query("UPDATE products SET name=?, cost=?, revenue=?, image_base64=? WHERE id=?",
                                           (new_p_name, new_p_cost, new_p_rev, final_img, p_id))
-                                st.success("修改成功！")
+                                st.session_state['success_msg'] = f"产品 {new_p_name} 修改成功！"
                                 st.rerun()
                     else:
                         st.warning(f"您即将删除：**{target_name}**")
@@ -203,7 +212,7 @@ if menu == "📦 生态产品库":
                             del_id = int(df_p[df_p['产品名称'] == target_name]['id'].values  [0])
                             run_query("DELETE FROM products WHERE id=?", (del_id,))
                             run_query("DELETE FROM interface_product_link WHERE product_id=?", (del_id,))
-                            st.success("删除成功！")
+                            st.session_state['success_msg'] = f"产品 {target_name} 已永久删除！"
                             st.rerun()
             else:
                 st.info("暂无产品可供编辑。")
@@ -272,7 +281,7 @@ elif menu == "🔌 接口标准库":
                     for p_name in selected_products:
                         run_query("INSERT INTO interface_product_link (interface_id, product_id) VALUES (?, ?)", 
                                   (int(new_i_id), int(product_options[p_name])))
-                    st.success(f"已添加接口: {i_name}")
+                    st.session_state['success_msg'] = f"成功新增接口：{i_name}"
                     st.rerun()
 
         with col_edit:
@@ -304,7 +313,7 @@ elif menu == "🔌 接口标准库":
                                 for p_name in new_selected_products:
                                     run_query("INSERT INTO interface_product_link (interface_id, product_id) VALUES (?, ?)", 
                                               (i_id, int(product_options[p_name])))
-                                st.success("修改成功！")
+                                st.session_state['success_msg'] = f"接口 {new_i_name} 修改成功！"
                                 st.rerun()
                     else:
                         st.warning(f"您即将删除：**{target_name}**")
@@ -313,7 +322,7 @@ elif menu == "🔌 接口标准库":
                             run_query("DELETE FROM interfaces WHERE id=?", (del_id,))
                             run_query("DELETE FROM interface_product_link WHERE interface_id=?", (del_id,))
                             run_query("DELETE FROM vehicle_configs WHERE interface_id=?", (del_id,))
-                            st.success("删除成功！")
+                            st.session_state['success_msg'] = f"接口 {target_name} 已永久删除！"
                             st.rerun()
             else:
                 st.info("暂无接口可供编辑。")
@@ -356,7 +365,7 @@ elif menu == "🚙 车型配置管理":
                 if st.button("创建车型"):
                     try:
                         run_query("INSERT INTO vehicles (model_name) VALUES (?)", (new_model,))
-                        st.success("创建成功")
+                        st.session_state['success_msg'] = f"车型 {new_model} 创建成功！"
                         st.rerun()
                     except:
                         st.error("车型已存在")
@@ -377,7 +386,7 @@ elif menu == "🚙 车型配置管理":
                     if st.button("保存配置", type="primary"):
                         run_query("INSERT INTO vehicle_configs (vehicle_id, interface_id, count, location) VALUES (?, ?, ?, ?)",
                                   (v_id, i_id, int(count), str(location)))
-                        st.success("配置已保存！")
+                        st.session_state['success_msg'] = f"已成功为 {sel_vehicle} 添加 {sel_interface}！"
                         st.rerun()
                 else:
                     st.warning("请先在左侧菜单添加产品和接口。")
@@ -407,13 +416,13 @@ elif menu == "🚙 车型配置管理":
                                 new_loc = st.text_input("修改布置位置", target_c_data['location'])
                                 if st.form_submit_button("💾 保存配置修改"):
                                     run_query("UPDATE vehicle_configs SET count=?, location=? WHERE id=?", (new_count, new_loc, target_c_id))
-                                    st.success("修改成功！")
+                                    st.session_state['success_msg'] = "配置修改成功！"
                                     st.rerun()
                         else:
                             st.warning("确认删除这条配置吗？")
                             if st.button("⚠️ 确认删除配置", type="primary"):
-                                run_query("DELETE FROM vehicle_configs WHERE id=?", (del_c_id,))
-                                st.success("配置已删除！")
+                                run_query("DELETE FROM vehicle_configs WHERE id=?", (target_c_id,))
+                                st.session_state['success_msg'] = "该条配置已删除！"
                                 st.rerun()
                     else:
                         st.info("暂无配置数据。")
@@ -427,7 +436,7 @@ elif menu == "🚙 车型配置管理":
                             del_v_id = int(vehicles[vehicles['model_name'] == del_v_name]['id'].values  [0])
                             run_query("DELETE FROM vehicles WHERE id=?", (del_v_id,))
                             run_query("DELETE FROM vehicle_configs WHERE vehicle_id=?", (del_v_id,))
-                            st.success("车型及相关配置已清空！")
+                            st.session_state['success_msg'] = f"车型 {del_v_name} 及其所有配置已清空！"
                             st.rerun()
 
 # ------------------------------------------
